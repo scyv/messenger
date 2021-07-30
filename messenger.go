@@ -36,7 +36,22 @@ type Connection struct {
 	RoomId string
 }
 
-func leaveRoom(connId string, roomId string) {
+var inmemory = make(map[string][]Message)
+var connections = make(map[string][]Connection)
+
+func subscribeRoom(connection *Connection, roomId string) {
+	connection.RoomId = roomId
+	list, ok := connections[roomId]
+	if ok {
+		connections[roomId] = append(list, *connection)
+	} else {
+		newlist := []Connection{*connection}
+		connections[roomId] = newlist
+	}
+	fmt.Printf("\nconnection %s subscribed room: %s", connection.Id, connection.RoomId)
+}
+
+func unsubscribeRoom(connId string, roomId string) {
 	idxToKill := -1
 	list, ok := connections[roomId]
 	if !ok {
@@ -51,11 +66,28 @@ func leaveRoom(connId string, roomId string) {
 	if idxToKill >= 0 {
 		connections[roomId] = append(list[:idxToKill], list[(idxToKill+1):]...)
 	}
-	fmt.Printf("\nconnection %s left room: %s", connId, roomId)
+	fmt.Printf("\nconnection %s unsubscribed room: %s", connId, roomId)
 }
 
-var inmemory = make(map[string][]Message)
-var connections = make(map[string][]Connection)
+func saveMessage(message *Message) {
+	roomId := message.RoomId
+	list, ok := inmemory[roomId]
+	if ok {
+		inmemory[roomId] = append(list, *message)
+	} else {
+		newlist := []Message{*message}
+		inmemory[roomId] = newlist
+	}
+	roomMembers, ok := connections[roomId]
+	if ok {
+		for _, c := range roomMembers {
+			closer, _ := c.Conn.NextWriter(websocket.TextMessage)
+			json.NewEncoder(closer).Encode(message)
+			closer.Close()
+		}
+	}
+	fmt.Printf("\nMessage from %s with id %s", message.Sender, message.MessageId)
+}
 
 func main() {
 
@@ -65,7 +97,7 @@ func main() {
 		conn, _ := upgrader.Upgrade(w, r, nil)
 		connect := &Connection{Conn: conn, Id: xid.New().String()}
 		defer func() {
-			leaveRoom(connect.Id, connect.RoomId)
+			unsubscribeRoom(connect.Id, connect.RoomId)
 			connect.Conn.Close()
 			fmt.Printf("\nconnection %s closed", connect.Id)
 		}()
@@ -73,26 +105,31 @@ func main() {
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
+				fmt.Printf("\nError: %s", err)
 				return
 			}
 			msgAsString := string(msg)
-			var idxEnterRoom = strings.Index(msgAsString, "ENTER ")
-			if idxEnterRoom == 0 {
-				var roomId = msgAsString[6:]
-				connect.RoomId = roomId
-				list, ok := connections[roomId]
+			var idxSubscribeRoom = strings.Index(msgAsString, "SUBSCRIBE ")
+			var idxUnsubscribeRoom = strings.Index(msgAsString, "UNSUBSCRIBE")
+			if idxSubscribeRoom == 0 {
+				var roomId = msgAsString[10:]
+				subscribeRoom(connect, roomId)
+			} else if idxUnsubscribeRoom == 0 {
+				unsubscribeRoom(connect.Id, connect.RoomId)
+			} else {
+				_, ok := connections[connect.RoomId]
 				if ok {
-					connections[roomId] = append(list, *connect)
-				} else {
-					newlist := []Connection{*connect}
-					connections[roomId] = newlist
+					var message Message
+					unmarshalError := json.Unmarshal([]byte(msgAsString), &message)
+					if unmarshalError == nil {
+						message.MessageId = xid.New().String()
+						message.RoomId = connect.RoomId
+						message.Timestamp = time.Now()
+						saveMessage(&message)
+					} else {
+						fmt.Printf("\nError: %s", unmarshalError)
+					}
 				}
-				fmt.Printf("\nconnection %s entered room: %s", connect.Id, connect.RoomId)
-			}
-
-			var idxLeaveRoom = strings.Index(msgAsString, "LEAVE")
-			if idxLeaveRoom == 0 {
-				leaveRoom(connect.Id, connect.RoomId)
 			}
 		}
 	})
@@ -107,24 +144,7 @@ func main() {
 		message.MessageId = xid.New().String()
 		message.RoomId = roomId
 		message.Timestamp = time.Now()
-
-		list, ok := inmemory[roomId]
-		if ok {
-			inmemory[roomId] = append(list, message)
-		} else {
-			newlist := []Message{message}
-			inmemory[roomId] = newlist
-		}
-		roomMembers, ok := connections[roomId]
-		if ok {
-			for _, c := range roomMembers {
-				closer, _ := c.Conn.NextWriter(websocket.TextMessage)
-				json.NewEncoder(closer).Encode(message)
-				closer.Close()
-			}
-		}
-
-		fmt.Printf("\nMessage from %s with id %s", message.Sender, message.MessageId)
+		saveMessage(&message)
 	}).Methods("POST")
 
 	r.HandleFunc("/room/{roomId}/messages", func(w http.ResponseWriter, r *http.Request) {

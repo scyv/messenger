@@ -1,24 +1,88 @@
 <html>
   <body>
-    <input id="input" type="text" />
-    <button onclick="send()">Send</button>
-    <pre id="output"></pre>
+    <input
+      id="nameEl"
+      type="text"
+      placeholder="Name"
+      onkeyup="saveName()"
+    /><br /><br />
+    <button onclick="enterRoom('ALLGEMEIN')">Raum "Allgemein"</button>
+    <button onclick="enterRoom('Couch')">Raum "Couch"</button><br /><br />
+    <input id="messageTextEl" type="text" placeholder="Nachricht" />
+    <button id="sendBtn" onclick="send()" disabled>Send</button>
+    <pre id="statusEl">Status: NOT connected</pre>
+    <div id="messagesEl"></div>
     <script>
-      var input = document.getElementById("input");
-      var output = document.getElementById("output");
+      var name = "";
+
+      var nameEl = document.getElementById("nameEl");
+      var messageTextEl = document.getElementById("messageTextEl");
+      var statusEl = document.getElementById("statusEl");
+      var messagesEl = document.getElementById("messagesEl");
       var socket = new WebSocket("ws://" + location.host + "/ws");
 
+      function addMessage(msg) {
+        var msgEl = document.createElement("div");
+        msgEl.appendChild(
+          document.createTextNode(
+            msg.timestamp + " " + msg.sender + ": " + msg.text
+          )
+        );
+        messagesEl.appendChild(msgEl);
+      }
+
       socket.onopen = function () {
-        output.innerHTML += "Status: Connected\n";
+        statusEl.textContent = "Status: Connected";
+      };
+
+      socket.onclose = function () {
+        statusEl.textContent = "Status: NOT connected";
       };
 
       socket.onmessage = function (e) {
-        output.innerHTML += "Server: " + e.data + "\n";
+        try {
+          addMessage(JSON.parse(e.data));
+        } catch (e) {
+          console.error("Cannot read message " + e);
+        }
       };
 
+      function saveName() {
+        name = nameEl.value;
+        if (name) {
+          document.querySelector("#sendBtn").removeAttribute("disabled");
+        } else {
+          document
+            .querySelector("#sendBtn")
+            .setAttribute("disabled", "disabled");
+        }
+      }
+
+      function enterRoom(raumName) {
+        socket.send("UNSUBSCRIBE");
+        messagesEl.innerHTML = "";
+        socket.send("SUBSCRIBE " + raumName);
+        fetch("/room/" + raumName + "/messages")
+          .then((r) => r.json())
+          .then((msgs) => {
+            msgs.forEach((msg) => addMessage(msg));
+          });
+      }
+
       function send() {
-        socket.send(input.value);
-        input.value = "";
+        if (!name) {
+          return;
+        }
+
+        var val = messageTextEl.value;
+        socket.send(
+          JSON.stringify({
+            sender: name,
+            text: val,
+          })
+        );
+
+        messageTextEl.value = "";
       }
     </script>
   </body>
