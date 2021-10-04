@@ -36,8 +36,12 @@ type Connection struct {
 	RoomId string
 }
 
+var adminToken = ""
 var inmemory = make(map[string][]Message)
 var connections = make(map[string][]Connection)
+
+const maxRooms = 100
+const maxMessages = 1000
 
 func subscribeRoom(connection *Connection, roomId string) {
 	connection.RoomId = roomId
@@ -73,8 +77,16 @@ func saveMessage(message *Message) {
 	roomId := message.RoomId
 	list, ok := inmemory[roomId]
 	if ok {
-		inmemory[roomId] = append(list, *message)
+		if len(list) >= maxMessages {
+			inmemory[roomId] = append(list[1:], *message)
+		} else {
+			inmemory[roomId] = append(list, *message)
+		}
 	} else {
+		if len(inmemory) > maxRooms {
+			fmt.Printf("\nNo more rooms allowed (%d)", len(inmemory))
+			return
+		}
 		newlist := []Message{*message}
 		inmemory[roomId] = newlist
 	}
@@ -134,6 +146,31 @@ func main() {
 		}
 	})
 
+	r.HandleFunc("/admin/{token}/settoken", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		adminToken = vars["token"]
+	}).Methods("POST")
+
+	r.HandleFunc("/admin/{token}/info", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		var token = vars["token"]
+		if token == adminToken {
+			fmt.Fprintf(w, "Connections: %d\n", len(connections))
+			fmt.Fprintf(w, "Rooms: %d\n", len(inmemory))
+			for roomId, messages := range inmemory {
+				fmt.Fprintf(w, "  %s, %d\n", roomId, len(messages))
+			}
+		}
+	}).Methods("GET")
+
+	r.HandleFunc("/admin/{token}/reset", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		var token = vars["token"]
+		if token == adminToken {
+			inmemory = make(map[string][]Message)
+		}
+	}).Methods("POST")
+
 	r.HandleFunc("/room/{roomId}/messages", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		roomId := vars["roomId"]
@@ -163,5 +200,5 @@ func main() {
 		http.ServeFile(w, r, "public/messenger.html")
 	})
 
-	http.ListenAndServe(":8080", r)
+	http.ListenAndServe(":28080", r)
 }
