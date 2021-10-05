@@ -1,4 +1,5 @@
 <html>
+  <head> </head>
   <body>
     <input
       id="nameEl"
@@ -19,18 +20,10 @@
       var messageTextEl = document.getElementById("messageTextEl");
       var statusEl = document.getElementById("statusEl");
       var messagesEl = document.getElementById("messagesEl");
-      var socket = new WebSocket("ws://" + location.host + "/ws");
 
-      function addMessage(msg) {
-        var msgEl = document.createElement("div");
-        msgEl.appendChild(
-          document.createTextNode(
-            msg.timestamp + " " + msg.sender + ": " + msg.text
-          )
-        );
-        messagesEl.appendChild(msgEl);
-      }
+      let socket;
 
+      socket = new WebSocket("wss://chat.web2021.dhbw.scytec.de/ws");
       socket.onopen = function () {
         statusEl.textContent = "Status: Connected";
       };
@@ -46,6 +39,26 @@
           console.error("Cannot read message " + e);
         }
       };
+      socket.onerror = function (e, a) {
+        console.error("WebSocket error observed:", event);
+      };
+
+      function addMessage(msg) {
+        var msgEl = document.createElement("div");
+        msgEl.appendChild(
+          document.createTextNode(
+            msg.timestamp + " " + msg.sender + ": " + msg.text
+          )
+        );
+        if (msg.data) {
+          const img = document.createElement("img");
+          img.src = msg.data;
+          img.style.maxWidth = 300;
+          msgEl.appendChild(img);
+        }
+
+        messagesEl.appendChild(msgEl);
+      }
 
       function saveName() {
         name = nameEl.value;
@@ -58,15 +71,19 @@
         }
       }
 
-      function enterRoom(raumName) {
+      async function enterRoom(raumName) {
         socket.send("UNSUBSCRIBE");
         messagesEl.innerHTML = "";
         socket.send("SUBSCRIBE " + raumName);
-        fetch("/room/" + raumName + "/messages")
-          .then((r) => r.json())
-          .then((msgs) => {
-            msgs.forEach((msg) => addMessage(msg));
-          });
+        try {
+          const response = await fetch(
+            "https://chat.web2021.dhbw.scytec.de/room/" + raumName + "/messages"
+          );
+          const json = await response.json();
+          json.forEach((msg) => addMessage(msg));
+        } catch (err) {
+          console.warn("err", err);
+        }
       }
 
       function send() {

@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>Messenger</title>
+    <title>Messenger API</title>
 
     <meta
       name="viewport"
@@ -9,10 +9,107 @@
 
     <link rel="stylesheet" href="./bootstrap.min.css" />
 
-    <style></style>
+    <style>
+      .card {
+        margin: 5px;
+      }
+    </style>
   </head>
 
   <body>
-    <div class="container"></div>
+    <div class="container">
+      <div class="card">
+        <div class="card-body">
+          <h3>Senden einer Nachricht</h3>
+          <p>POST /room/{roomId}/messages</p>
+          <ul>
+            <li>
+              roomId - Id des Raums (Erlaubte Zeichen: a-z, A-Z, 0-9, -, _)
+            </li>
+          </ul>
+          <h4>Body:</h4>
+          <code>
+            <pre>
+[
+  {
+    "sender": "Sender",
+    "text": "Der Text",
+    "data": "optionale Daten",
+  },
+  ...
+]
+        </pre
+            >
+          </code>          
+          <h4>Response:</h4>
+          <p>
+            Erstellte Nachricht:
+            <code>
+              <pre>
+{
+  "messageId": "c5ecpiqn7enc1eiedkkg",
+  "roomId": "RaumId",
+  "sender": "Sender",
+  "text": "Der Text",
+  "data": "optionale Daten",
+  "timestamp": "2021-10-02T12:08:11.22307946+02:00"
+}
+          </pre
+              >
+            </code>
+          </p>
+          <p>
+            Fehler:
+            <ul>
+              <li>400 - Wenn sender, text oder data fehlen oder die roomId ungültige Zeichen enthält</li>
+            </ul>
+          </p>
+          <p>
+            Hinweise:
+            <ul>
+              <li>Es können nur bis zu 1000 Nachrichten pro Raum gespeichert werden</li>
+              <li>Es können nur bis zu 100 Räume gespeichert werden</li>
+            </ul>
+          </p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <h3>Laden aller Nachrichten eines Raums</h3>
+          <p>GET /room/{roomId}/messages</p>
+          <ul>
+            <li>
+              roomId - Id des Raums (Erlaubte Zeichen: a-z, A-Z, 0-9, -, _)
+            </li>
+          </ul>
+          <h4>Response:</h4>
+          <p>
+            Array von Nachrichten:
+            <code>
+              <pre>
+[
+  {
+    "messageId": "c5ecpiqn7enc1eiedkkg",
+    "roomId": "RaumId",
+    "sender": "Sender",
+    "text": "Der Text",
+    "data": "Die Daten",
+    "timestamp": "2021-10-02T12:08:11.22307946+02:00"
+  },
+  ...
+]
+          </pre
+              >
+            </code>
+          </p>
+          <p>
+            Fehler:
+            <ul>
+              <li>404 - Wenn für den Raum noch keine Nachrichten existieren</li>
+            </ul>
+          </p>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

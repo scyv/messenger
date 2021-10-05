@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +16,9 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 type Room struct {
@@ -75,6 +79,7 @@ func unsubscribeRoom(connId string, roomId string) {
 
 func saveMessage(message *Message) {
 	roomId := message.RoomId
+
 	list, ok := inmemory[roomId]
 	if ok {
 		if len(list) >= maxMessages {
@@ -83,7 +88,7 @@ func saveMessage(message *Message) {
 			inmemory[roomId] = append(list, *message)
 		}
 	} else {
-		if len(inmemory) > maxRooms {
+		if len(inmemory) >= maxRooms {
 			fmt.Printf("\nNo more rooms allowed (%d)", len(inmemory))
 			return
 		}
@@ -101,17 +106,34 @@ func saveMessage(message *Message) {
 	fmt.Printf("\nMessage from %s with id %s", message.Sender, message.MessageId)
 }
 
+func checkRoomId(roomId string) bool {
+	matches, _ := regexp.MatchString("^[a-zA-Z0-9-_]+$", roomId)
+	return matches
+}
+
 func main() {
 
 	r := mux.NewRouter()
 
 	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		conn, _ := upgrader.Upgrade(w, r, nil)
+		if r.Method == http.MethodOptions {
+			return
+		}
+		if r.Header.Get("Connection") != "upgrade" {
+			return
+		}
+		conn, err := upgrader.Upgrade(w, r, w.Header())
+		if conn == nil || err != nil {
+			fmt.Printf("\nError: %s", err)
+			return
+		}
 		connect := &Connection{Conn: conn, Id: xid.New().String()}
 		defer func() {
-			unsubscribeRoom(connect.Id, connect.RoomId)
-			connect.Conn.Close()
-			fmt.Printf("\nconnection %s closed", connect.Id)
+			if connect != nil && connect.Conn != nil && conn != nil {
+				unsubscribeRoom(connect.Id, connect.RoomId)
+				connect.Conn.Close()
+				fmt.Printf("\nconnection %s closed", connect.Id)
+			}
 		}()
 
 		for {
@@ -125,6 +147,9 @@ func main() {
 			var idxUnsubscribeRoom = strings.Index(msgAsString, "UNSUBSCRIBE")
 			if idxSubscribeRoom == 0 {
 				var roomId = msgAsString[10:]
+				if !checkRoomId(roomId) {
+					return
+				}
 				subscribeRoom(connect, roomId)
 			} else if idxUnsubscribeRoom == 0 {
 				unsubscribeRoom(connect.Id, connect.RoomId)
@@ -147,9 +172,12 @@ func main() {
 	})
 
 	r.HandleFunc("/admin/{token}/settoken", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			return
+		}
 		vars := mux.Vars(r)
 		adminToken = vars["token"]
-	}).Methods("POST")
+	}).Methods("POST", "OPTIONS")
 
 	r.HandleFunc("/admin/{token}/info", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
@@ -172,19 +200,39 @@ func main() {
 	}).Methods("POST")
 
 	r.HandleFunc("/room/{roomId}/messages", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			return
+		}
 		vars := mux.Vars(r)
 		roomId := vars["roomId"]
+		if !checkRoomId(roomId) {
+			http.Error(w, "{\"error\": \"RoomId invalid\"}", http.StatusBadRequest)
+			return
+		}
 
 		var message Message
 
 		json.NewDecoder(r.Body).Decode(&message)
+		if message.Sender == "" {
+			http.Error(w, "{\"error\": \"Sender invalid. Please provide a 'sender' property.\"}", http.StatusBadRequest)
+			return
+		}
+		if message.Text == "" && message.Data == "" {
+			http.Error(w, "{\"error\": \"Payload invalid. Please provide a 'text' property and/or 'data' property.\"}", http.StatusBadRequest)
+			return
+		}
 		message.MessageId = xid.New().String()
 		message.RoomId = roomId
 		message.Timestamp = time.Now()
 		saveMessage(&message)
-	}).Methods("POST")
+		json.NewEncoder(w).Encode(message)
+	}).Methods("POST", "OPTIONS")
 
 	r.HandleFunc("/room/{roomId}/messages", func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method == http.MethodOptions {
+			return
+		}
 		vars := mux.Vars(r)
 		roomId := vars["roomId"]
 
@@ -192,13 +240,11 @@ func main() {
 		if ok {
 			json.NewEncoder(w).Encode(list)
 		} else {
-			http.Error(w, "Room Not found", http.StatusNotFound)
+			http.Error(w, "{\"error\": \"Room not found\"}", http.StatusNotFound)
 		}
 	}).Methods("GET")
 
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "public/messenger.html")
-	})
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./public/")))
 
-	http.ListenAndServe(":28080", r)
+	http.ListenAndServe("127.0.0.1:28080", r)
 }
