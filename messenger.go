@@ -119,9 +119,6 @@ func main() {
 		if r.Method == http.MethodOptions {
 			return
 		}
-		if r.Header.Get("Connection") != "upgrade" {
-			return
-		}
 		conn, err := upgrader.Upgrade(w, r, w.Header())
 		if conn == nil || err != nil {
 			fmt.Printf("\nError: %s", err)
@@ -225,6 +222,7 @@ func main() {
 		message.RoomId = roomId
 		message.Timestamp = time.Now()
 		saveMessage(&message)
+		w.Header().Set("Content-Type", "applicatioon/json")
 		json.NewEncoder(w).Encode(message)
 	}).Methods("POST", "OPTIONS")
 
@@ -235,9 +233,14 @@ func main() {
 		}
 		vars := mux.Vars(r)
 		roomId := vars["roomId"]
-
+		if !checkRoomId(roomId) {
+			http.Error(w, "{\"error\": \"RoomId invalid\"}", http.StatusBadRequest)
+			return
+		}
+		
 		list, ok := inmemory[roomId]
 		if ok {
+			w.Header().Set("Content-Type", "applicatioon/json")
 			json.NewEncoder(w).Encode(list)
 		} else {
 			http.Error(w, "{\"error\": \"Room not found\"}", http.StatusNotFound)

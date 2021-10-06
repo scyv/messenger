@@ -13,6 +13,11 @@
       .card {
         margin: 5px;
       }
+
+      pre code {
+        font-size: 87.5%;
+        color: #e83e8c;
+      }
     </style>
   </head>
 
@@ -28,8 +33,8 @@
             </li>
           </ul>
           <h4>Body:</h4>
-          <code>
-            <pre>
+          <p>Content-Type: application/json</p>
+          <pre><code>
 [
   {
     "sender": "Sender",
@@ -38,14 +43,12 @@
   },
   ...
 ]
-        </pre
-            >
           </code>          
+          </pre>
           <h4>Response:</h4>
-          <p>
-            Erstellte Nachricht:
-            <code>
-              <pre>
+          <p>Erstellte Nachricht:</p>
+          <p>Content-Type: application/json</p>
+          <pre><code>
 {
   "messageId": "c5ecpiqn7enc1eiedkkg",
   "roomId": "RaumId",
@@ -54,23 +57,22 @@
   "data": "optionale Daten",
   "timestamp": "2021-10-02T12:08:11.22307946+02:00"
 }
-          </pre
-              >
-            </code>
-          </p>
-          <p>
-            Fehler:
-            <ul>
-              <li>400 - Wenn sender, text oder data fehlen oder die roomId ungültige Zeichen enthält</li>
-            </ul>
-          </p>
-          <p>
-            Hinweise:
-            <ul>
-              <li>Es können nur bis zu 1000 Nachrichten pro Raum gespeichert werden</li>
-              <li>Es können nur bis zu 100 Räume gespeichert werden</li>
-            </ul>
-          </p>
+          </code>
+          </pre>
+          <p>Fehler:</p>
+          <ul>
+            <li>
+              400 - Wenn sender, text oder data fehlen oder die roomId ungültige
+              Zeichen enthält
+            </li>
+          </ul>
+          <p>Hinweise:</p>
+          <ul>
+            <li>
+              Es können nur bis zu 1000 Nachrichten pro Raum gespeichert werden
+            </li>
+            <li>Es können nur bis zu 100 Räume gespeichert werden</li>
+          </ul>
         </div>
       </div>
       <div class="card">
@@ -83,10 +85,9 @@
             </li>
           </ul>
           <h4>Response:</h4>
-          <p>
-            Array von Nachrichten:
-            <code>
-              <pre>
+          <p>Array von Nachrichten:</p>
+          <p>Content-Type: application/json</p>
+          <pre><code>
 [
   {
     "messageId": "c5ecpiqn7enc1eiedkkg",
@@ -98,16 +99,51 @@
   },
   ...
 ]
-          </pre
-              >
-            </code>
-          </p>
+          </code>
+          </pre>
+          <p>Fehler:</p>
+          <ul>
+            <li>400 - Wenn die roomId ungültige Zeichen enthält</li>
+            <li>404 - Wenn für den Raum noch keine Nachrichten existieren</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <h3>Websocket Schnittstelle</h3>
           <p>
-            Fehler:
-            <ul>
-              <li>404 - Wenn für den Raum noch keine Nachrichten existieren</li>
-            </ul>
+            <code
+              >const socket = new
+              WebSocket("wss://chat.web2021.dhbw.scytec.de/ws");</code
+            >
           </p>
+          <h4>Nachrichten an Socket:</h4>
+          <ul>
+            <li>'SUBSCRIBE &lt;raumId&gt;' - Anmelden an einem Raum</li>
+            <li>'UNSUBSCRIBE' - Abmelden vom aktuellen Raum</li>
+            <li>
+              '<code
+                >{ "sender": "Sender", "text": "Der Text", "data": "optionale
+                Daten"}</code
+              >' - Senden einer Nachricht
+            </li>
+          </ul>
+          <h4>Nachrichten von Socket:</h4>
+          <ul>
+            <li>
+              '<code
+                >{ "messageId": "c5ecpiqn7enc1eiedkkg", "roomId": "RaumId",
+                "sender": "Sender", "text": "Der Text", "data": "Die
+                Daten","timestamp": "2021-10-02T12:08:11.22307946+02:00"}</code
+              >' - Wenn eine neue Nachricht angekommen ist
+              <ul>
+                <li>
+                  Hinweis: Diese Nachrichten kommen nur für den aktuell
+                  angemeldeten Raum
+                </li>
+              </ul>
+            </li>
+          </ul>
         </div>
       </div>
     </div>

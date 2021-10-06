@@ -21,9 +21,7 @@
       var statusEl = document.getElementById("statusEl");
       var messagesEl = document.getElementById("messagesEl");
 
-      let socket;
-
-      socket = new WebSocket("wss://chat.web2021.dhbw.scytec.de/ws");
+      const socket = new WebSocket("wss://" + location.host + "/ws");
       socket.onopen = function () {
         statusEl.textContent = "Status: Connected";
       };
@@ -76,9 +74,7 @@
         messagesEl.innerHTML = "";
         socket.send("SUBSCRIBE " + raumName);
         try {
-          const response = await fetch(
-            "https://chat.web2021.dhbw.scytec.de/room/" + raumName + "/messages"
-          );
+          const response = await fetch("/room/" + raumName + "/messages");
           const json = await response.json();
           json.forEach((msg) => addMessage(msg));
         } catch (err) {
