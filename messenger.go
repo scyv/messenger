@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -44,11 +45,14 @@ var adminToken = ""
 var inmemory = make(map[string][]Message)
 var connections = make(map[string][]Connection)
 
+var mutex = &sync.Mutex{}
+
 const maxRooms = 5000
 const maxMessages = 1000
 
 func subscribeRoom(connection *Connection, roomId string) {
 	connection.RoomId = roomId
+	mutex.Lock()
 	list, ok := connections[roomId]
 	if ok {
 		connections[roomId] = append(list, *connection)
@@ -56,13 +60,16 @@ func subscribeRoom(connection *Connection, roomId string) {
 		newlist := []Connection{*connection}
 		connections[roomId] = newlist
 	}
+	mutex.Unlock()
 	fmt.Printf("\nconnection %s subscribed room: %s", connection.Id, connection.RoomId)
 }
 
 func unsubscribeRoom(connId string, roomId string) {
 	idxToKill := -1
+	mutex.Lock()
 	list, ok := connections[roomId]
 	if !ok {
+		mutex.Unlock()
 		return
 	}
 	for idx, c := range list {
@@ -74,12 +81,14 @@ func unsubscribeRoom(connId string, roomId string) {
 	if idxToKill >= 0 {
 		connections[roomId] = append(list[:idxToKill], list[(idxToKill+1):]...)
 	}
+	mutex.Unlock()
 	fmt.Printf("\nconnection %s unsubscribed room: %s", connId, roomId)
 }
 
 func saveMessage(message *Message) {
 	roomId := message.RoomId
 
+	mutex.Lock()
 	list, ok := inmemory[roomId]
 	if ok {
 		if len(list) >= maxMessages {
@@ -90,12 +99,16 @@ func saveMessage(message *Message) {
 	} else {
 		if len(inmemory) >= maxRooms {
 			fmt.Printf("\nNo more rooms allowed (%d)", len(inmemory))
+			mutex.Unlock()
 			return
 		}
 		newlist := []Message{*message}
 		inmemory[roomId] = newlist
 	}
+	mutex.Unlock()
+	mutex.Lock()
 	roomMembers, ok := connections[roomId]
+	mutex.Unlock()
 	if ok {
 		for _, c := range roomMembers {
 			closer, _ := c.Conn.NextWriter(websocket.TextMessage)
@@ -151,7 +164,9 @@ func main() {
 			} else if idxUnsubscribeRoom == 0 {
 				unsubscribeRoom(connect.Id, connect.RoomId)
 			} else {
+				mutex.Lock()
 				_, ok := connections[connect.RoomId]
+				mutex.Unlock()
 				if ok {
 					var message Message
 					unmarshalError := json.Unmarshal([]byte(msgAsString), &message)
@@ -182,9 +197,11 @@ func main() {
 		if token == adminToken {
 			fmt.Fprintf(w, "Connections: %d\n", len(connections))
 			fmt.Fprintf(w, "Rooms: %d\n", len(inmemory))
+			mutex.Lock()
 			for roomId, messages := range inmemory {
 				fmt.Fprintf(w, "  %s, %d\n", roomId, len(messages))
 			}
+			mutex.Unlock()
 		}
 	}).Methods("GET")
 
@@ -192,7 +209,9 @@ func main() {
 		vars := mux.Vars(r)
 		var token = vars["token"]
 		if token == adminToken {
+			mutex.Lock()
 			inmemory = make(map[string][]Message)
+			mutex.Unlock()
 		}
 	}).Methods("POST")
 
@@ -237,8 +256,9 @@ func main() {
 			http.Error(w, "{\"error\": \"RoomId invalid\"}", http.StatusBadRequest)
 			return
 		}
-
+		mutex.Lock()
 		list, ok := inmemory[roomId]
+		mutex.Unlock()
 		if ok {
 			w.Header().Set("Content-Type", "applicatioon/json")
 			json.NewEncoder(w).Encode(list)
