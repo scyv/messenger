@@ -44,7 +44,7 @@ var adminToken = ""
 var inmemory = make(map[string][]Message)
 var connections = make(map[string][]Connection)
 
-const maxRooms = 100
+const maxRooms = 5000
 const maxMessages = 1000
 
 func subscribeRoom(connection *Connection, roomId string) {
@@ -237,7 +237,7 @@ func main() {
 			http.Error(w, "{\"error\": \"RoomId invalid\"}", http.StatusBadRequest)
 			return
 		}
-		
+
 		list, ok := inmemory[roomId]
 		if ok {
 			w.Header().Set("Content-Type", "applicatioon/json")
